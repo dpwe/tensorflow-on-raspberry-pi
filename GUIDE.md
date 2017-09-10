@@ -254,36 +254,40 @@ Once in the directory, we have to write a nifty one-liner that is incredibly imp
 grep -Rl 'lib64' | xargs sed -i 's/lib64/lib/g'
 ```
 
-Next, we need to delete a particular line in `tensorflow/core/platform/platform.h`. Open up the file in your favorite text editor:
+In earlier releases, it was necessary to edit `tensorflow/core/platform/platform.h` to prevent the ARM-based Raspberry Pi from being identified as a mobile device, but a specific check has been incorporated into recent TensorFlow releases.
+
+One remaining problem with the 1.4.0 release of TensorFlow is that it links to a version of the Eigen library that has a bug for the ARM architecture.  We can fix this by linking in a different Eigen library, by changing the version that is requested by the build.  Open the `workspace.bzl` file:
 
 ```shell
-sudo nano tensorflow/core/platform/platform.h
+sudo nano tensorflow/workspace.bzl
 ```
 
-Now, scroll down toward the bottom and delete the following line containing `#define IS_MOBILE_PLATFORM` (around line 48):
-
-```cpp
-#elif defined(__arm__)
-#define PLATFORM_POSIX
-...
-#define IS_MOBILE_PLATFORM   <----- DELETE THIS LINE
-```
-
-This keeps our Raspberry Pi device (which has an ARM CPU) from being recognized as a mobile device.
-
-Finally, we have to adjust the protocol to access the Numeric JS library- for some reason the Cloudflare security certificates don't work properly over `https`. We'll need to fix this in the Bazel `WORKSPACE` file:
-
-```shell
-sudo nano WORKSPACE
-```
-
-Around line 283, change `https` to `http`:
+.. and scroll down to the section that refers to `eigen_archive` (around line 174).  It will look something like:
 
 ```
-http_file(
-  name = "numericjs_numeric_min_js",
-  url = "http://cdnjs.cloudflare.com/ajax/libs/numeric/1.2.6/numeric.min.js",
-)
+  native.new_http_archive(
+      name = "eigen_archive",
+      urls = [
+          "http://mirror.bazel.build/bitbucket.org/eigen/eigen/get/f3a22f35b044.tar.gz",
+      ],
+      sha256 = "ca7beac153d4059c02c8fc59816c82d54ea47fe58365e8aded4082ded0b820c4",
+      strip_prefix = "eigen-eigen-f3a22f35b044",
+      build_file = str(Label("//third_party:eigen.BUILD")),
+  )
+```
+
+Change it to this:
+
+```
+  native.new_http_archive(
+      name = "eigen_archive",
+      urls = [
+          "https://bitbucket.org/eigen/eigen/get/d781c1de9834.tar.gz",
+      ],
+      sha256 = "a34b208da6ec18fa8da963369e166e4a368612c14d956dd2f9d7072904675d9b",
+      strip_prefix = "eigen-eigen-d781c1de9834",
+      build_file = str(Label("//third_party:eigen.BUILD")),
+  )
 ```
 
 Now let's configure the build:
@@ -323,7 +327,7 @@ bazel-bin/tensorflow/tools/pip_package/build_pip_package /tmp/tensorflow_pkg
 And then install it!
 
 ```shell
-sudo pip install /tmp/tensorflow_pkg/tensorflow-1.1.0-cp27-none-linux_armv7l.whl
+sudo pip install /tmp/tensorflow_pkg/tensorflow-*.whl
 ```
 
 ### 5. Cleaning Up
